@@ -8,8 +8,8 @@ export async function pesquisarMedicamentos(nome) {
   }
 
   const { data, error } = await supabase
-    .from("catalogo_medicamentos")
-    .select("id, medicamento, laboratorio, validado")
+    .from("estabilidade_medicamentos")
+    .select("*")
     .ilike("medicamento", `%${termo}%`)
     .order("medicamento")
     .limit(30);
