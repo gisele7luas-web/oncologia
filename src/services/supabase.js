@@ -1,18 +1,36 @@
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
-if (!supabaseUrl || !supabaseKey) {
+const chaveOriginal = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+
+if (!supabaseUrl || !chaveOriginal) {
   throw new Error(
     "Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY."
   );
 }
 
-const fetchOriginal = globalThis.fetch.bind(globalThis);
+// Remove espaços e quebras de linha acidentais.
+// Se a mesma chave foi colada várias vezes, usa apenas uma cópia.
+const partesChave = chaveOriginal.split(/\s+/).filter(Boolean);
+
+const chavesUnicas = [...new Set(partesChave)];
+
+if (chavesUnicas.length !== 1) {
+  throw new Error(
+    "A chave do Supabase contém valores diferentes. Confira VITE_SUPABASE_ANON_KEY no Vercel."
+  );
+}
+
+const supabaseKey = chavesUnicas[0];
 
 const fetchDiagnostico = async (input, init) => {
-  const url = typeof input === "string" ? input : input.url;
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
 
   console.log("[Supabase diagnóstico] Requisição iniciada:", {
     host: new URL(url).hostname,
@@ -20,7 +38,7 @@ const fetchDiagnostico = async (input, init) => {
   });
 
   try {
-    const resposta = await fetchOriginal(input, init);
+    const resposta = await fetch(input, init);
 
     console.log("[Supabase diagnóstico] Resposta:", {
       status: resposta.status,
