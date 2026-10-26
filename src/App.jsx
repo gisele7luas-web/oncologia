@@ -11,6 +11,7 @@ import {
 
 import Medicamentos from "./pages/Medicamentos";
 
+
 export default function App() {
   const [pesquisa, setPesquisa] = useState("");
   const [tela, setTela] = useState("inicio");
@@ -50,7 +51,6 @@ export default function App() {
 
   function abrirMedicamentos() {
     setTela("medicamentos");
-    setPesquisa("");
   }
 
   return (
@@ -77,7 +77,7 @@ export default function App() {
               Voltar ao painel
             </button>
 
-            <Medicamentos />
+            <Medicamentos pesquisaInicial={pesquisa} />
           </>
         ) : (
           <>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   FlaskConical,
@@ -8,9 +8,14 @@ import {
   Clock3,
   CircleHelp,
   ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 
-import { pesquisarMedicamentos } from "../services/medicamentos";
+import {
+  pesquisarMedicamentos,
+  consultarMedicamentoPorId,
+} from "../services/medicamentos";
+
 import DetalhesMedicamento from "./DetalhesMedicamento";
 
 function SeloValidacao({ validado }) {
@@ -40,18 +45,19 @@ function SeloValidacao({ validado }) {
   );
 }
 
-export default function Medicamentos() {
-  const [pesquisa, setPesquisa] = useState("");
+export default function Medicamentos({ pesquisaInicial = "" }) {
+  const [pesquisa, setPesquisa] = useState(pesquisaInicial);
   const [medicamentos, setMedicamentos] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [pesquisou, setPesquisou] = useState(false);
+
   const [medicamentoSelecionado, setMedicamentoSelecionado] = useState(null);
+  const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
+  const [erroDetalhes, setErroDetalhes] = useState("");
 
-  async function handlePesquisar(event) {
-    event.preventDefault();
-
-    const termo = pesquisa.trim();
+  async function executarPesquisa(termoInformado) {
+    const termo = termoInformado.trim();
 
     if (termo.length < 2) {
       setErro("Digite pelo menos 2 caracteres para pesquisar.");
@@ -62,6 +68,7 @@ export default function Medicamentos() {
 
     setCarregando(true);
     setErro("");
+    setErroDetalhes("");
     setPesquisou(true);
     setMedicamentos([]);
     setMedicamentoSelecionado(null);
@@ -80,11 +87,57 @@ export default function Medicamentos() {
     }
   }
 
+  async function abrirDetalhes(item) {
+    if (carregandoDetalhes) return;
+
+    setCarregandoDetalhes(true);
+    setErroDetalhes("");
+    setMedicamentoSelecionado(null);
+
+    try {
+      const detalhe = await consultarMedicamentoPorId(item.id);
+
+      if (!detalhe) {
+        setErroDetalhes(
+          "Medicamento não encontrado. Faça uma nova pesquisa e tente novamente."
+        );
+        return;
+      }
+
+      setMedicamentoSelecionado(detalhe);
+    } catch (error) {
+      console.error("Erro ao abrir detalhes do medicamento:", error);
+
+      setErroDetalhes(
+        "Não foi possível carregar os detalhes. Verifique a conexão e as permissões do Supabase."
+      );
+    } finally {
+      setCarregandoDetalhes(false);
+    }
+  }
+
+  useEffect(() => {
+    const termo = pesquisaInicial.trim();
+
+    if (termo.length >= 2) {
+      setPesquisa(termo);
+      executarPesquisa(termo);
+    }
+  }, [pesquisaInicial]);
+
+  function handlePesquisar(event) {
+    event.preventDefault();
+    executarPesquisa(pesquisa);
+  }
+
   if (medicamentoSelecionado) {
     return (
       <DetalhesMedicamento
         medicamento={medicamentoSelecionado}
-        aoVoltar={() => setMedicamentoSelecionado(null)}
+        aoVoltar={() => {
+          setMedicamentoSelecionado(null);
+          setErroDetalhes("");
+        }}
       />
     );
   }
@@ -139,6 +192,26 @@ export default function Medicamentos() {
         </button>
       </form>
 
+      {carregandoDetalhes && (
+        <div
+          role="status"
+          className="mt-5 flex items-center gap-2 rounded-lg bg-blue-50 p-4 text-blue-800"
+        >
+          <LoaderCircle size={20} className="animate-spin" />
+          Carregando detalhes do medicamento...
+        </div>
+      )}
+
+      {erroDetalhes && (
+        <div
+          role="alert"
+          className="mt-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"
+        >
+          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+          <p>{erroDetalhes}</p>
+        </div>
+      )}
+
       {erro && (
         <div
           role="alert"
@@ -149,14 +222,11 @@ export default function Medicamentos() {
         </div>
       )}
 
-      {!erro &&
-        pesquisou &&
-        !carregando &&
-        medicamentos.length === 0 && (
-          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
-            Nenhum medicamento encontrado para essa pesquisa.
-          </div>
-        )}
+      {!erro && pesquisou && !carregando && medicamentos.length === 0 && (
+        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
+          Nenhum medicamento encontrado para essa pesquisa.
+        </div>
+      )}
 
       {medicamentos.length > 0 && (
         <div className="mt-6">
@@ -167,7 +237,7 @@ export default function Medicamentos() {
 
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-green-50 px-3 py-1 text-green-800">
-                Validado
+                Validado no sistema
               </span>
 
               <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">
@@ -191,14 +261,19 @@ export default function Medicamentos() {
                 {medicamentos.map((item) => (
                   <tr
                     key={item.id}
-                    onClick={() => setMedicamentoSelecionado(item)}
+                    onClick={() => abrirDetalhes(item)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        setMedicamentoSelecionado(item);
+                      if (
+                        (event.key === "Enter" || event.key === " ") &&
+                        !carregandoDetalhes
+                      ) {
+                        event.preventDefault();
+                        abrirDetalhes(item);
                       }
                     }}
                     role="button"
                     tabIndex={0}
+                    aria-label={`Abrir detalhes de ${item.medicamento}`}
                     className="cursor-pointer transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
                     title="Clique para consultar os detalhes"
                   >
@@ -232,12 +307,11 @@ export default function Medicamentos() {
 
           <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
             <p className="text-sm leading-relaxed text-amber-900">
-              <strong>Atenção:</strong> os indicadores representam o estado
-              de validação registrado no sistema. Registros pendentes não
-              devem ser utilizados como referência clínica aprovada para
-              preparo, conservação ou administração de medicamentos.
-              A utilização clínica exige revisão e aprovação por
-              profissional habilitado.
+              <strong>Atenção:</strong> os indicadores representam o estado de
+              validação registrado no sistema. Registros pendentes não devem
+              ser utilizados como referência clínica aprovada para preparo,
+              conservação ou administração de medicamentos. A utilização
+              clínica exige revisão e aprovação por profissional habilitado.
             </p>
           </div>
         </div>
